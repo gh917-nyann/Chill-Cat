@@ -54,27 +54,45 @@
         // ==========================================
         // PHẦN 1: SETUP NỀN VŨ TRỤ (CANVAS)
         // ==========================================
+
         const canvas = document.getElementById("bg");
         const ctx = canvas.getContext("2d");
+
+        const particles = [];
+        const STAR_COUNT = 400; // Tăng lên 400 cho dày đặc
+
+        // Điểm phát xạ sao di động
+        let emitter = {
+            x: window.innerWidth / 2,
+            y: window.innerHeight / 2,
+            vx: 1.2, // Tốc độ di chuyển của "nguồn" sao
+            vy: 0.8
+        };
+
+        function createParticle(isInitial = false) {
+            return {
+                // Nếu khởi tạo thì rải đều, nếu sinh ra lúc đang chạy thì lấy từ emitter
+                x: isInitial ? Math.random() * canvas.width : emitter.x,
+                y: isInitial ? Math.random() * canvas.height : emitter.y,
+                size: Math.random() * 2.5,
+                opacity: Math.random(),
+                fade: Math.random() * 0.02 + 0.005,
+                // Vận tốc hạt bắn ra ngẫu nhiên mọi hướng
+                vx: (Math.random() - 0.5) * 2,
+                vy: (Math.random() - 0.5) * 2
+            };
+        }
 
         function resize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
+            particles.length = 0;
+            for (let i = 0; i < STAR_COUNT; i++) {
+                particles.push(createParticle(true));
+            }
         }
         resize();
         window.addEventListener("resize", resize);
-
-        // Hạt lơ lửng (Particles)
-        const particles = [];
-        for (let i = 0; i < 200; i++) {
-            particles.push({
-                x: Math.random() * canvas.width,
-                y: Math.random() * canvas.height,
-                vx: (Math.random() - 0.5) * 0.3,
-                vy: (Math.random() - 0.5) * 0.3,
-                size: Math.random() * 2
-            });
-        }
 
         // Sao băng nhỏ (Small Stars)
         const smallStars = [];
@@ -239,16 +257,33 @@
         function drawBackground() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Vẽ Particles
+            // 1. Cập nhật vị trí điểm phát xạ (Emitter)
+            emitter.x += emitter.vx;
+            emitter.y += emitter.vy;
+
+            // Nảy emitter khi chạm viền để nó không bay mất tích
+            if (emitter.x < 0 || emitter.x > canvas.width) emitter.vx *= -1;
+            if (emitter.y < 0 || emitter.y > canvas.height) emitter.vy *= -1;
+
+            // 2. Vẽ và cập nhật từng hạt sao
             particles.forEach(p => {
-                p.x += p.vx; p.y += p.vy;
-                if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
-                if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+                p.x += p.vx;
+                p.y += p.vy;
+
+                p.opacity += p.fade;
+                if (p.opacity > 1 || p.opacity < 0) p.fade *= -1;
+
+                // Nếu sao bay ra khỏi màn hình -> Reset về vị trí hiện tại của Emitter
+                if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) {
+                    Object.assign(p, createParticle(false));
+                }
+
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                ctx.fillStyle = "white";
+                ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0, p.opacity)})`;
                 ctx.fill();
             });
+            ctx.shadowBlur = 0; // Reset shadow sau khi vẽ xong sao
 
             // Vẽ sao nhỏ
             for (let i = smallStars.length - 1; i >= 0; i--) {
