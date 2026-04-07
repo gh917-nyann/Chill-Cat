@@ -1,1 +1,7 @@
-### HERE IS MY WEBSITE: [https://gh917-nyann.github.io/Chill-Cat/](https://gh917-nyann.github.io/Chill-Cat/)
+<div align="center">
+
+# 🥱 NOTHING BETTER TO DO
+### Boredom + AI = This
+--Nyann--
+
+</div>
