@@ -123,6 +123,14 @@
             mouse.y = e.clientY;
         });
 
+        // Bắt sự kiện nhấn chuột để spawn object tại vị trí con trỏ
+        window.addEventListener("mousedown", (e) => {
+            // Gọi hàm tạo object. 
+            // Trừ đi 45px (khoảng một nửa kích thước trung bình của GIF) 
+            // để object sinh ra có tâm nằm ngay mũi tên chuột thay vì bị lệch góc.
+            createObject(e.clientX - 45, e.clientY - 45);
+        });
+
         function randomSize() { return 60 + Math.random() * 60; }
         function randomGif() { return gifs[Math.floor(Math.random() * gifs.length)]; }
 
@@ -149,7 +157,9 @@
                 baseVy: baseVy,
                 angle: Math.random() * 360,
                 va: (Math.random() - 0.5) * 12, // Xoay nhanh hơn từ bản của bạn
-                knockTime: 0
+                knockTime: 0,
+                scale: 0,      // Bắt đầu từ kích thước tàng hình (0)
+                scaleV: 0.2    // Vận tốc bung ra ban đầu
             });
         }
 
@@ -346,10 +356,24 @@
                     o.vy *= -0.5;
                 }
 
-                // Áp dụng CSS
+                // ===================================
+                // Hiệu ứng "Bung ra" (Spring effect)
+                // ===================================
+                if (o.scale !== 1) {
+                    o.scaleV += (1 - o.scale) * 0.15; // Lực đàn hồi kéo tỷ lệ về mức 1
+                    o.scaleV *= 0.8; // Độ ma sát để dừng lại dần
+                    o.scale += o.scaleV;
+
+                    // Nếu đã nảy xong thì chốt ở mức 1 cho nhẹ máy
+                    if (Math.abs(1 - o.scale) < 0.01 && Math.abs(o.scaleV) < 0.01) {
+                        o.scale = 1;
+                    }
+                }
+
+                // Áp dụng CSS (thêm lệnh scale() vào transform)
                 o.el.style.left = o.x + "px";
                 o.el.style.top = o.y + "px";
-                o.el.style.transform = "rotate(" + o.angle + "deg)";
+                o.el.style.transform = `rotate(${o.angle}deg) scale(${o.scale})`;
             });
 
             requestAnimationFrame(update);
