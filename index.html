@@ -59,6 +59,7 @@
         const ctx = canvas.getContext("2d");
 
         const particles = [];
+        const trailParticles = [];
         const STAR_COUNT = 400; // Tăng lên 400 cho dày đặc
 
         // Điểm phát xạ sao di động
@@ -79,7 +80,9 @@
                 fade: Math.random() * 0.02 + 0.005,
                 // Vận tốc hạt bắn ra ngẫu nhiên mọi hướng
                 vx: (Math.random() - 0.5) * 2,
-                vy: (Math.random() - 0.5) * 2
+                vy: (Math.random() - 0.5) * 2,
+
+                color: "rgba(255, 255, 255, "
             };
         }
 
@@ -280,10 +283,27 @@
 
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0, p.opacity)})`;
+                ctx.fillStyle = p.color + `${Math.max(0, p.opacity)})`;
                 ctx.fill();
             });
             ctx.shadowBlur = 0; // Reset shadow sau khi vẽ xong sao
+
+            for (let i = trailParticles.length - 1; i >= 0; i--) {
+                let t = trailParticles[i];
+                t.x += t.vx;
+                t.y += t.vy;
+                t.opacity -= 0.02; // Làm mờ dần
+
+                if (t.opacity <= 0) {
+                    trailParticles.splice(i, 1); // Xóa hạt khi không còn nhìn thấy
+                    continue;
+                }
+
+                ctx.beginPath();
+                ctx.arc(t.x, t.y, t.size, 0, Math.PI * 2);
+                ctx.fillStyle = t.color + `${t.opacity})`;
+                ctx.fill();
+            }
 
             // Vẽ sao nhỏ
             for (let i = smallStars.length - 1; i >= 0; i--) {
@@ -297,34 +317,54 @@
                 if (s.life > s.maxLife) smallStars.splice(i, 1);
             }
 
-            // Vẽ sao lớn & Tương tác sao lớn
+
             if (bigStar) {
                 bigStar.x += bigStar.vx;
                 bigStar.y += bigStar.vy;
 
+                // --- HIỆU ỨNG MỚI: BẮN SAO Ở ĐUÔI ---
+                // Mỗi khung hình, ta lấy 2-3 hạt particles ngẫu nhiên để "tái sinh" tại đuôi sao băng
+                for (let i = 0; i < 5; i++) {
+                    let hue = (Date.now() / 5 + i * 10) % 360;
+                    trailParticles.push({
+                        x: bigStar.x,
+                        y: bigStar.y,
+                        size: Math.random() * 3 + 1,
+                        vx: -bigStar.vx * 0.2 + (Math.random() - 0.5) * 2,
+                        vy: -bigStar.vy * 0.2 + (Math.random() - 0.5) * 2,
+                        opacity: 1,
+                        color: `hsla(${hue}, 90%, 70%, `
+                    });
+                }
+
+                // Vẽ đầu sao băng lớn
                 ctx.beginPath();
                 ctx.moveTo(bigStar.x, bigStar.y);
-                ctx.lineTo(bigStar.x - bigStar.vx * 10, bigStar.y - bigStar.vy * 10);
-                ctx.lineWidth = 4;
-                ctx.strokeStyle = "white";
-                ctx.stroke();
+                ctx.lineTo(bigStar.x - bigStar.vx * 15, bigStar.y - bigStar.vy * 15);
+                ctx.lineWidth = 6; // Làm dày hơn cho ngầu
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
 
-                // Sao lớn đẩy vật thể
+                // Thêm hiệu ứng phát sáng cho sao băng
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = "cyan";
+                ctx.stroke();
+                ctx.shadowBlur = 0; // Reset ngay để không lag
+
+                // Giữ nguyên logic đẩy vật thể (GIF) cũ của bạn
                 objects.forEach(o => {
                     let dx = o.x + o.size / 2 - bigStar.x;
                     let dy = o.y + o.size / 2 - bigStar.y;
                     let dist = Math.sqrt(dx * dx + dy * dy);
-
                     if (dist < 180) {
                         let nx = dx / dist;
                         let ny = dy / dist;
-                        o.vx = nx * 10;
-                        o.vy = ny * 10;
+                        o.vx = nx * 12;
+                        o.vy = ny * 12;
                         o.knockTime = 25;
                     }
                 });
 
-                if (bigStar.x > canvas.width + 200) bigStar = null;
+                if (bigStar.x > canvas.width + 500) bigStar = null;
             }
         }
 
