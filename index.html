@@ -2,194 +2,345 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Nyann</title>
+<title>Nyann - Merged Version</title>
 <style>
-body{
-margin:0;
-background:#111;
-height:100vh;
-overflow:hidden;
-position:relative;
-}
-
-img{
-position:absolute;
-pointer-events:none;
-}
+    body {
+        margin: 0;
+        height: 100vh;
+        overflow: hidden;
+        position: relative;
+        /* Nền vũ trụ Gradient từ bản 1 */
+        background: linear-gradient(270deg, #0f2027, #203a43, #2c5364, #1a2a6c);
+        background-size: 800% 800%;
+        animation: gradientMove 20s ease infinite;
+    }
+    @keyframes gradientMove {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+    canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        pointer-events: none; /* Để không block sự kiện chuột của ảnh */
+    }
+    img {
+        position: absolute;
+        pointer-events: none;
+    }
 </style>
 </head>
 <body>
 
+<canvas id="bg"></canvas>
+
 <script>
-// ===== TẠO MẢNG GIF BẰNG FOR =====
-const gifs=[];
-const TOTAL_GIFS=18; // số lượng file gif bạn có (gif1 -> gif30)
+// ==========================================
+// PHẦN 1: SETUP NỀN VŨ TRỤ (CANVAS)
+// ==========================================
+const canvas = document.getElementById("bg");
+const ctx = canvas.getContext("2d");
 
-for(let i=1;i<=TOTAL_GIFS;i++){
-gifs.push(`gif/gif${i}.gif`);;
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener("resize", resize);
+
+// Hạt lơ lửng (Particles)
+const particles = [];
+for (let i = 0; i < 200; i++) {
+    particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+        size: Math.random() * 2
+    });
 }
 
-// ===== PHẦN CÒN LẠI =====
-const objects=[];
-const INIT_COUNT=120;
+// Sao băng nhỏ (Small Stars)
+const smallStars = [];
+function spawnSmallStar(x, y) {
+    smallStars.push({
+        x: x ?? Math.random() * canvas.width,
+        y: y ?? Math.random() * canvas.height * 0.5,
+        vx: 5 + Math.random() * 3,
+        vy: 2 + Math.random() * 2,
+        life: 0,
+        maxLife: 40
+    });
+}
+setInterval(() => { if (Math.random() < 0.8) spawnSmallStar(); }, 700);
 
-let mouse={x:-1000,y:-1000};
+// Sao chổi lớn (Big Star)
+let bigStar = null;
+function spawnBigStar() {
+    bigStar = {
+        x: -150,
+        y: Math.random() * canvas.height,
+        vx: 10 + Math.random() * 3,
+        vy: (Math.random() - 0.5) * 2
+    };
+}
+(function loopBig() {
+    setTimeout(() => { spawnBigStar(); loopBig(); }, 8000 + Math.random() * 4000);
+})();
 
-window.addEventListener("mousemove",e=>{
-mouse.x=e.clientX;
-mouse.y=e.clientY;
+
+// ==========================================
+// PHẦN 2: LOGIC VẬT THỂ (GIFs) & TƯƠNG TÁC
+// ==========================================
+const gifs = [];
+const TOTAL_GIFS = 18; 
+for (let i = 1; i <= TOTAL_GIFS; i++) {
+    gifs.push(`gif/gif${i}.gif`);
+}
+
+const objects = [];
+const INIT_COUNT = 120; // Giữ số lượng 120 từ bản gốc của bạn
+let mouse = { x: -1000, y: -1000 };
+
+window.addEventListener("mousemove", e => {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
 });
 
-function randomSize(){
-return 60 + Math.random()*60;
+function randomSize() { return 60 + Math.random() * 60; }
+function randomGif() { return gifs[Math.floor(Math.random() * gifs.length)]; }
+
+function createObject(x, y) {
+    const img = document.createElement("img");
+    img.src = randomGif();
+
+    let size = randomSize();
+    img.style.width = size + "px";
+    img.style.height = size + "px";
+    document.body.appendChild(img);
+
+    let baseVx = (Math.random() - 0.5) * 2;
+    let baseVy = (Math.random() - 0.5) * 2;
+
+    objects.push({
+        el: img,
+        size: size,
+        x: x ?? Math.random() * (window.innerWidth - size),
+        y: y ?? Math.random() * (window.innerHeight - size),
+        vx: baseVx,
+        vy: baseVy,
+        baseVx: baseVx,
+        baseVy: baseVy,
+        angle: Math.random() * 360,
+        va: (Math.random() - 0.5) * 12, // Xoay nhanh hơn từ bản của bạn
+        knockTime: 0
+    });
 }
 
-function randomGif(){
-return gifs[Math.floor(Math.random()*gifs.length)];
+// Khởi tạo vật thể
+for (let i = 0; i < INIT_COUNT; i++) createObject();
+
+// Hàm đổi size ngẫu nhiên (từ bản của bạn)
+function applyRandomSize(o) {
+    let newSize = randomSize();
+    o.size = newSize;
+    o.el.style.width = newSize + "px";
+    o.el.style.height = newSize + "px";
 }
 
-function createObject(x,y){
-const img=document.createElement("img");
-img.src=randomGif();
+// Hệ thống chống kẹt (Crowding) - Tối ưu hóa bằng Timer để đỡ lag
+let crowdTimer = 0;
+const CROWD_DELAY = 10; // Chạy mỗi 10 frame thay vì mỗi frame để giữ FPS mượt
 
-let size=randomSize();
-img.style.width=size+"px";
-img.style.height=size+"px";
+function resolveCrowding() {
+    const radius = 100;
+    const threshold = 6;
 
-document.body.appendChild(img);
+    for (let i = 0; i < objects.length; i++) {
+        let count = 0;
+        for (let j = 0; j < objects.length; j++) {
+            let dx = objects[i].x - objects[j].x;
+            let dy = objects[i].y - objects[j].y;
+            if (dx * dx + dy * dy < radius * radius) count++;
+        }
 
-let baseVx=(Math.random()-0.5)*2;
-let baseVy=(Math.random()-0.5)*2;
+        if (count > threshold) {
+            let angle = Math.random() * Math.PI * 2;
+            let force = 4 + Math.random() * 4;
 
-let obj={
-el:img,
-size:size,
-
-x: x ?? Math.random()*(window.innerWidth-size),
-y: y ?? Math.random()*(window.innerHeight-size),
-
-vx:baseVx,
-vy:baseVy,
-
-baseVx:baseVx,
-baseVy:baseVy,
-
-angle:Math.random()*360,
-va:(Math.random()-0.5)*12,
-
-knockTime:0
-};
-
-objects.push(obj);
+            objects[i].vx += Math.cos(angle) * force;
+            objects[i].vy += Math.sin(angle) * force;
+            objects[i].knockTime = 10;
+            applyRandomSize(objects[i]); // Kèm đổi size khi văng ra
+        }
+    }
 }
 
-// init
-for(let i=0;i<INIT_COUNT;i++) createObject();
+// Hệ thống phân bổ khu vực (Region Control từ bản 1)
+let regionTimer = 0;
+function regionControl() {
+    let grid = 4;
+    let cellW = canvas.width / grid;
+    let cellH = canvas.height / grid;
+    let cells = Array.from({ length: grid * grid }, () => []);
 
-function applyRandomSize(o){
-let newSize=randomSize();
-o.size=newSize;
-o.el.style.width=newSize+"px";
-o.el.style.height=newSize+"px";
+    objects.forEach((o, i) => {
+        let cx = Math.floor(o.x / cellW);
+        let cy = Math.floor(o.y / cellH);
+        let idx = cy * grid + cx;
+        if (cells[idx]) cells[idx].push(i);
+    });
+
+    cells.forEach(cell => {
+        if (cell.length < 2) {
+            for (let i = 0; i < 2; i++) createObject(Math.random() * canvas.width, Math.random() * canvas.height);
+        }
+        if (cell.length > 12) {
+            for (let i = 0; i < 2; i++) {
+                let idx = cell[Math.floor(Math.random() * cell.length)];
+                if (objects[idx]) {
+                    objects[idx].el.remove();
+                    objects.splice(idx, 1);
+                }
+            }
+        }
+    });
 }
 
-// ===== CROWDING =====
-function resolveCrowding(){
-const radius=100;
-const threshold=6;
+// ==========================================
+// PHẦN 3: VÒNG LẶP CHÍNH (MAIN LOOP)
+// ==========================================
+function drawBackground() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-for(let i=0;i<objects.length;i++){
-let count=0;
+    // Vẽ Particles
+    particles.forEach(p => {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = "white";
+        ctx.fill();
+    });
 
-for(let j=0;j<objects.length;j++){
-let dx=objects[i].x - objects[j].x;
-let dy=objects[i].y - objects[j].y;
-let dist=Math.sqrt(dx*dx+dy*dy);
+    // Vẽ sao nhỏ
+    for (let i = smallStars.length - 1; i >= 0; i--) {
+        let s = smallStars[i];
+        s.x += s.vx; s.y += s.vy; s.life++;
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(s.x - s.vx * 4, s.y - s.vy * 4);
+        ctx.strokeStyle = "white";
+        ctx.stroke();
+        if (s.life > s.maxLife) smallStars.splice(i, 1);
+    }
 
-if(dist < radius) count++;
+    // Vẽ sao lớn & Tương tác sao lớn
+    if (bigStar) {
+        bigStar.x += bigStar.vx;
+        bigStar.y += bigStar.vy;
+        
+        ctx.beginPath();
+        ctx.moveTo(bigStar.x, bigStar.y);
+        ctx.lineTo(bigStar.x - bigStar.vx * 10, bigStar.y - bigStar.vy * 10);
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = "white";
+        ctx.stroke();
+
+        // Sao lớn đẩy vật thể
+        objects.forEach(o => {
+            let dx = o.x + o.size / 2 - bigStar.x;
+            let dy = o.y + o.size / 2 - bigStar.y;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist < 180) {
+                let nx = dx / dist;
+                let ny = dy / dist;
+                o.vx = nx * 10;
+                o.vy = ny * 10;
+                o.knockTime = 25;
+            }
+        });
+
+        if (bigStar.x > canvas.width + 200) bigStar = null;
+    }
 }
 
-if(count > threshold){
-let angle=Math.random()*Math.PI*2;
-let force=4 + Math.random()*4;
+function update() {
+    drawBackground();
 
-objects[i].vx += Math.cos(angle)*force;
-objects[i].vy += Math.sin(angle)*force;
-objects[i].knockTime = 10;
+    // Chạy các hệ thống có độ trễ
+    crowdTimer++;
+    regionTimer++;
+    if (crowdTimer > CROWD_DELAY) { resolveCrowding(); crowdTimer = 0; }
+    if (regionTimer > 180) { regionControl(); regionTimer = 0; }
 
-applyRandomSize(objects[i]);
-}
-}
-}
+    // Xử lý các vật thể
+    objects.forEach(o => {
+        
+        // Tương tác chuột (Bản của bạn: văng + đổi ảnh + đổi size)
+        let dx = o.x + o.size / 2 - mouse.x;
+        let dy = o.y + o.size / 2 - mouse.y;
+        let dist = Math.sqrt(dx * dx + dy * dy);
 
-// ===== MAIN LOOP =====
-function update(){
+        if (dist < 120 && dist > 0) {
+            let nx = dx / dist;
+            let ny = dy / dist;
+            o.vx = nx * 10;
+            o.vy = ny * 10;
+            o.knockTime = 30;
+            o.el.src = randomGif();
+            applyRandomSize(o);
+        }
 
-resolveCrowding();
+        // Nội suy lực đẩu
+        if (o.knockTime > 0) {
+            o.knockTime--;
+            o.vx *= 0.95;
+            o.vy *= 0.95;
+        } else {
+            o.vx = o.baseVx;
+            o.vy = o.baseVy;
+        }
 
-objects.forEach(o=>{
+        o.x += o.vx;
+        o.y += o.vy;
+        o.angle += o.va;
 
-let dx=o.x+o.size/2 - mouse.x;
-let dy=o.y+o.size/2 - mouse.y;
-let dist=Math.sqrt(dx*dx+dy*dy);
+        // Xử lý va chạm viền (Logic nảy viền chuẩn xác từ bản của bạn)
+        if (o.x < 0) {
+            o.x = 0;
+            o.baseVx *= -1;
+            o.vx *= -0.5;
+        }
+        if (o.x > window.innerWidth - o.size) {
+            o.x = window.innerWidth - o.size;
+            o.baseVx *= -1;
+            o.vx *= -0.5;
+        }
+        if (o.y < 0) {
+            o.y = 0;
+            o.baseVy *= -1;
+            o.vy *= -0.5;
+        }
+        if (o.y > window.innerHeight - o.size) {
+            o.y = window.innerHeight - o.size;
+            o.baseVy *= -1;
+            o.vy *= -0.5;
+        }
 
-let radius=120;
+        // Áp dụng CSS
+        o.el.style.left = o.x + "px";
+        o.el.style.top = o.y + "px";
+        o.el.style.transform = "rotate(" + o.angle + "deg)";
+    });
 
-if(dist < radius && dist > 0){
-let nx=dx/dist;
-let ny=dy/dist;
-
-o.vx = nx * 10;
-o.vy = ny * 10;
-o.knockTime = 30;
-
-o.el.src = randomGif();
-applyRandomSize(o);
-}
-
-if(o.knockTime > 0){
-o.knockTime--;
-o.vx *= 0.95;
-o.vy *= 0.95;
-}else{
-o.vx = o.baseVx;
-o.vy = o.baseVy;
-}
-
-o.x += o.vx;
-o.y += o.vy;
-o.angle += o.va;
-
-if(o.x < 0){
-o.x = 0;
-o.baseVx *= -1;
-o.vx *= -0.5;
-}
-if(o.x > window.innerWidth - o.size){
-o.x = window.innerWidth - o.size;
-o.baseVx *= -1;
-o.vx *= -0.5;
-}
-
-if(o.y < 0){
-o.y = 0;
-o.baseVy *= -1;
-o.vy *= -0.5;
-}
-if(o.y > window.innerHeight - o.size){
-o.y = window.innerHeight - o.size;
-o.baseVy *= -1;
-o.vy *= -0.5;
-}
-
-o.el.style.left=o.x+"px";
-o.el.style.top=o.y+"px";
-o.el.style.transform="rotate("+o.angle+"deg)";
-});
-
-requestAnimationFrame(update);
+    requestAnimationFrame(update);
 }
 
+// Bắt đầu vòng lặp
 update();
 </script>
 
