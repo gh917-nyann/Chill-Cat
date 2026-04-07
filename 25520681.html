@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Nyann</title>
+<style>
+body{
+margin:0;
+background:#111;
+height:100vh;
+overflow:hidden;
+position:relative;
+}
+
+img{
+position:absolute;
+pointer-events:none;
+}
+</style>
+</head>
+<body>
+
+<script>
+// ===== TẠO MẢNG GIF BẰNG FOR =====
+const gifs=[];
+const TOTAL_GIFS=18; // số lượng file gif bạn có (gif1 -> gif30)
+
+for(let i=1;i<=TOTAL_GIFS;i++){
+gifs.push(`gif${i}.gif`);
+}
+
+// ===== PHẦN CÒN LẠI =====
+const objects=[];
+const INIT_COUNT=120;
+
+let mouse={x:-1000,y:-1000};
+
+window.addEventListener("mousemove",e=>{
+mouse.x=e.clientX;
+mouse.y=e.clientY;
+});
+
+function randomSize(){
+return 60 + Math.random()*60;
+}
+
+function randomGif(){
+return gifs[Math.floor(Math.random()*gifs.length)];
+}
+
+function createObject(x,y){
+const img=document.createElement("img");
+img.src=randomGif();
+
+let size=randomSize();
+img.style.width=size+"px";
+img.style.height=size+"px";
+
+document.body.appendChild(img);
+
+let baseVx=(Math.random()-0.5)*2;
+let baseVy=(Math.random()-0.5)*2;
+
+let obj={
+el:img,
+size:size,
+
+x: x ?? Math.random()*(window.innerWidth-size),
+y: y ?? Math.random()*(window.innerHeight-size),
+
+vx:baseVx,
+vy:baseVy,
+
+baseVx:baseVx,
+baseVy:baseVy,
+
+angle:Math.random()*360,
+va:(Math.random()-0.5)*12,
+
+knockTime:0
+};
+
+objects.push(obj);
+}
+
+// init
+for(let i=0;i<INIT_COUNT;i++) createObject();
+
+function applyRandomSize(o){
+let newSize=randomSize();
+o.size=newSize;
+o.el.style.width=newSize+"px";
+o.el.style.height=newSize+"px";
+}
+
+// ===== CROWDING =====
+function resolveCrowding(){
+const radius=100;
+const threshold=6;
+
+for(let i=0;i<objects.length;i++){
+let count=0;
+
+for(let j=0;j<objects.length;j++){
+let dx=objects[i].x - objects[j].x;
+let dy=objects[i].y - objects[j].y;
+let dist=Math.sqrt(dx*dx+dy*dy);
+
+if(dist < radius) count++;
+}
+
+if(count > threshold){
+let angle=Math.random()*Math.PI*2;
+let force=4 + Math.random()*4;
+
+objects[i].vx += Math.cos(angle)*force;
+objects[i].vy += Math.sin(angle)*force;
+objects[i].knockTime = 10;
+
+applyRandomSize(objects[i]);
+}
+}
+}
+
+// ===== MAIN LOOP =====
+function update(){
+
+resolveCrowding();
+
+objects.forEach(o=>{
+
+let dx=o.x+o.size/2 - mouse.x;
+let dy=o.y+o.size/2 - mouse.y;
+let dist=Math.sqrt(dx*dx+dy*dy);
+
+let radius=120;
+
+if(dist < radius && dist > 0){
+let nx=dx/dist;
+let ny=dy/dist;
+
+o.vx = nx * 10;
+o.vy = ny * 10;
+o.knockTime = 30;
+
+o.el.src = randomGif();
+applyRandomSize(o);
+}
+
+if(o.knockTime > 0){
+o.knockTime--;
+o.vx *= 0.95;
+o.vy *= 0.95;
+}else{
+o.vx = o.baseVx;
+o.vy = o.baseVy;
+}
+
+o.x += o.vx;
+o.y += o.vy;
+o.angle += o.va;
+
+if(o.x < 0){
+o.x = 0;
+o.baseVx *= -1;
+o.vx *= -0.5;
+}
+if(o.x > window.innerWidth - o.size){
+o.x = window.innerWidth - o.size;
+o.baseVx *= -1;
+o.vx *= -0.5;
+}
+
+if(o.y < 0){
+o.y = 0;
+o.baseVy *= -1;
+o.vy *= -0.5;
+}
+if(o.y > window.innerHeight - o.size){
+o.y = window.innerHeight - o.size;
+o.baseVy *= -1;
+o.vy *= -0.5;
+}
+
+o.el.style.left=o.x+"px";
+o.el.style.top=o.y+"px";
+o.el.style.transform="rotate("+o.angle+"deg)";
+});
+
+requestAnimationFrame(update);
+}
+
+update();
+</script>
+
+</body>
+</html>
