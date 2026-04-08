@@ -66,10 +66,15 @@
         const INIT_COUNT = 120;
 
         let bigStar = null;
-        let mouse = { x: -1000, y: -1000 };
         let crowdTimer = 0;
         let regionTimer = 0;
         const CROWD_DELAY = 10;
+
+        // Trạng thái chuột cho tính năng Lỗ đen / Big Bang
+        let mouse = { x: -1000, y: -1000 };
+        let isMouseDown = false;
+        let isPulling = false;
+        let mouseDownTime = 0;
 
         // Điểm phát xạ sao di động (Nguồn sinh sao trắng)
         let emitter = {
@@ -173,6 +178,9 @@
             const radius = 100;
             const threshold = 6;
             for (let i = 0; i < objects.length; i++) {
+
+                if (objects[i].knockTime > 15) continue;
+
                 let count = 0;
                 for (let j = 0; j < objects.length; j++) {
                     let dx = objects[i].x - objects[j].x;
@@ -320,15 +328,43 @@
                 let dy = o.y + o.size / 2 - mouse.y;
                 let dist = Math.sqrt(dx * dx + dy * dy);
 
-                if (dist < 120 && dist > 0) {
-                    o.vx = (dx / dist) * 10; o.vy = (dy / dist) * 10;
-                    o.knockTime = 30; o.el.src = randomGif(); applyRandomSize(o);
+                // ==========================================
+                // TƯƠNG TÁC VỚI CHUỘT (CLICK / LỖ ĐEN / ĐẨY LÙI)
+                // ==========================================
+                if (isMouseDown && (Date.now() - mouseDownTime > 300)) {
+                    // Kích hoạt Lỗ Đen khi giữ chuột > 0.15s
+                    if (dist < 9999) {
+                        isPulling = true;
+                        o.vx -= (dx / dist) * 2.5;
+                        o.vy -= (dy / dist) * 2.5;
+                        o.vx *= 0.85; // Ma sát để tụ lại
+                        o.vy *= 0.85;
+                        o.va = (Math.random() - 0.5) * 30; // Xoay tít
+                    }
+                } else if (!isMouseDown) {
+                    // Không giữ chuột -> Rẽ ra như cũ
+                    if (dist < 120 && dist > 0 && o.knockTime < 40) {
+                        let nx = dx / dist;
+                        let ny = dy / dist;
+                        o.vx = nx * 10;
+                        o.vy = ny * 10;
+                        o.knockTime = 30;
+                        o.el.src = randomGif();
+                        applyRandomSize(o);
+                    }
                 }
 
+                // ==========================================
+                // NỘI SUY LỰC ĐẨY / QUÁN TÍNH
+                // ==========================================
                 if (o.knockTime > 0) {
-                    o.knockTime--; o.vx *= 0.95; o.vy *= 0.95;
-                } else {
-                    o.vx = o.baseVx; o.vy = o.baseVy;
+                    o.knockTime--;
+                    o.vx *= 0.95;
+                    o.vy *= 0.95;
+                } else if (!isMouseDown) {
+                    // Trôi nổi bình thường nếu không bị hút
+                    o.vx += (o.baseVx - o.vx) * 0.05;
+                    o.vy += (o.baseVy - o.vy) * 0.05;
                 }
 
                 o.x += o.vx; o.y += o.vy; o.angle += o.va;
@@ -352,12 +388,55 @@
         }
 
         // ==========================================
-        // 5. KHỞI CHẠY & SỰ KIỆN
+        // 5. KHỞI CHẠY & SỰ KIỆN CHUỘT
         // ==========================================
         resize();
         window.addEventListener("resize", resize);
-        window.addEventListener("mousemove", e => { mouse.x = e.clientX; mouse.y = e.clientY; });
-        window.addEventListener("mousedown", e => { createObject(e.clientX - 45, e.clientY - 45); });
+
+        window.addEventListener("mousemove", e => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+
+        // BẮT ĐẦU NHẤN CHUỘT
+        window.addEventListener("mousedown", (e) => {
+            isMouseDown = true;
+            mouseDownTime = Date.now();
+        });
+
+        // NHẢ CHUỘT RA (PHIÊN BẢN NỔ NGẪU NHIÊN & LỰC VĂNG KHÁC NHAU)
+        window.addEventListener("mouseup", (e) => {
+            isMouseDown = false;
+            let holdDuration = Date.now() - mouseDownTime;
+
+            if (holdDuration < 400) {
+                // Nhấn thả nhanh -> Sinh mèo
+                createObject(e.clientX - 45, e.clientY - 45);
+            } else {
+                // Giữ lâu nhả ra -> Vụ nổ Big Bang
+                if (isPulling) {
+                    objects.forEach(o => {
+                        let randomAngle = Math.random() * Math.PI * 2;
+                        let nx = Math.cos(randomAngle);
+                        let ny = Math.sin(randomAngle);
+
+                        // --- CHỈNH SỬA TẠI ĐÂY ---
+                        // Tạo một lực văng ngẫu nhiên từ 60 đến 160 cho mỗi đối tượng
+                        let randomForce = 60 + Math.random() * 100;
+
+                        o.vx = nx * randomForce;
+                        o.vy = ny * randomForce;
+
+                        // Tiện thể, cho thời gian bay (trước khi hãm phanh) cũng ngẫu nhiên luôn!
+                        // Con nào knockTime nhỏ sẽ phanh lại sớm, con nào lớn sẽ bay đập tận tường
+                        o.knockTime = 50 + Math.random() * 50;
+
+                        applyRandomSize(o);
+                    });
+                }
+            }
+            isPulling = false;
+        });
 
         for (let i = 0; i < INIT_COUNT; i++) createObject();
         setInterval(() => {
