@@ -13,20 +13,13 @@
             background: linear-gradient(270deg, #0f2027, #203a43, #2c5364, #1a2a6c);
             background-size: 800% 800%;
             animation: gradientMove 20s ease infinite;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
         @keyframes gradientMove {
-            0% {
-                background-position: 0% 50%;
-            }
-
-            50% {
-                background-position: 100% 50%;
-            }
-
-            100% {
-                background-position: 0% 50%;
-            }
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
         }
 
         canvas {
@@ -43,6 +36,64 @@
             will-change: transform;
             transform: translateZ(0);
         }
+
+        /* KHU VỰC UI (Bảng đếm & Nút bấm) */
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none; /* Xuyên chuột cho container */
+        }
+
+        .panel {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 20px;
+            border-radius: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            backdrop-filter: blur(5px);
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.2);
+            text-align: center;
+        }
+
+        #counter {
+            color: #00ffcc;
+            border: 1px solid rgba(0, 255, 204, 0.3);
+        }
+
+        #mode-btn {
+            pointer-events: auto; /* Cho phép click vào nút này */
+            cursor: pointer;
+            border: 2px solid rgba(0, 255, 204, 0.5);
+            color: #00ffcc;
+            background: rgba(0, 255, 204, 0.1);
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            font-size: 14px;
+            letter-spacing: 1px;
+        }
+
+        #mode-btn:hover {
+            background: rgba(0, 255, 204, 0.3);
+            box-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
+        }
+
+        /* Style khi chuyển sang chế độ ĐẨY (Màu đỏ cam) */
+        #mode-btn.push-mode {
+            border-color: rgba(255, 87, 34, 0.5);
+            color: #ff5722;
+            background: rgba(255, 87, 34, 0.1);
+            box-shadow: 0 0 15px rgba(255, 87, 34, 0.2);
+        }
+        #mode-btn.push-mode:hover {
+            background: rgba(255, 87, 34, 0.3);
+            box-shadow: 0 0 20px rgba(255, 87, 34, 0.5);
+        }
+
     </style>
 </head>
 
@@ -50,160 +101,152 @@
 
     <canvas id="bg"></canvas>
     <div id="yt-player" style="position: absolute; top: -9999px; left: -9999px; width: 1px; height: 1px;"></div>
+    
+    <div id="ui-container">
+        <div id="counter" class="panel">MEOW: <span id="count-number">0</span></div>
+        <button id="mode-btn" class="panel">Clone-mode</button>
+    </div>
 
     <script>
         // ==========================================
-        // 1. KHỞI TẠO & BIẾN TOÀN CỤC
+        // 1. CÀI ĐẶT THÔNG SỐ CHÍNH
+        // ==========================================
+        const CONFIG = {
+            MAX_OBJECTS: 180,    
+            INIT_COUNT: 120,     
+            STAR_COUNT: 400,     
+            TOTAL_GIFS: 30,
+            PUSH_FORCE: 35       // LỰC ĐẨY KHI Ở CHẾ ĐỘ "ĐẨY" (Chỉnh cao lên để văng mạnh hơn)
+        };
+
+        // ==========================================
+        // 2. BIẾN TOÀN CỤC & TRẠNG THÁI
         // ==========================================
         const canvas = document.getElementById("bg");
         const ctx = canvas.getContext("2d");
 
-        const particles = [];       // Sao trắng nền
-        const trailParticles = [];  // Sao màu đuôi sao băng
-        const smallStars = [];      // Sao xẹt (vệt sáng)
-        const objects = [];         // Các ảnh GIF
-
-        const STAR_COUNT = 400;
-        const TOTAL_GIFS = 30;
-        const INIT_COUNT = 120;
+        const particles = [];       
+        const trailParticles = [];  
+        const smallStars = [];      
+        const objects = [];         
 
         let bigStar = null;
         let crowdTimer = 0;
         let regionTimer = 0;
         const CROWD_DELAY = 10;
 
-        // Trạng thái chuột cho tính năng Lỗ đen / Big Bang
         let mouse = { x: -1000, y: -1000 };
         let isMouseDown = false;
         let isPulling = false;
         let mouseDownTime = 0;
 
-        // Điểm phát xạ sao di động (Nguồn sinh sao trắng)
-        let emitter = {
-            x: window.innerWidth / 2,
-            y: window.innerHeight / 2,
-            vx: 1.2,
-            vy: 0.8
-        };
+        // BIẾN TRẠNG THÁI CHẾ ĐỘ (Mặc định là true = Nhân đôi)
+        let isCloneMode = true; 
 
-        // Danh sách link GIF
+        let emitter = { x: window.innerWidth / 2, y: window.innerHeight / 2, vx: 1.2, vy: 0.8 };
+
         const gifs = [];
-        for (let i = 1; i <= TOTAL_GIFS; i++) {
-            gifs.push(`gif/gif${i}.gif`);
-        }
+        for (let i = 1; i <= CONFIG.TOTAL_GIFS; i++) { gifs.push(`gif/gif${i}.gif`); }
 
         // ==========================================
-        // 2. HÀM HỖ TRỢ (UTILITIES)
+        // 3. XỬ LÝ SỰ KIỆN UI (NÚT BẤM CHUYỂN CHẾ ĐỘ)
+        // ==========================================
+        const modeBtn = document.getElementById("mode-btn");
+        modeBtn.addEventListener("click", (e) => {
+            // Ngăn sự kiện click xuyên xuống lớp mousedown bên dưới để không tạo Big Bang
+            e.stopPropagation(); 
+            
+            isCloneMode = !isCloneMode; // Đảo ngược chế độ
+            
+            if (isCloneMode) {
+                modeBtn.innerText = "Clone-mode";
+                modeBtn.classList.remove("push-mode");
+            } else {
+                modeBtn.innerText = "Push-mode";
+                modeBtn.classList.add("push-mode");
+            }
+        });
+
+        // Ngăn mousedown lọt qua nút bấm
+        modeBtn.addEventListener("mousedown", e => e.stopPropagation());
+
+        // ==========================================
+        // 4. HÀM HỖ TRỢ (UTILITIES)
         // ==========================================
         function randomSize() { return 60 + Math.random() * 60; }
         function randomGif() { return gifs[Math.floor(Math.random() * gifs.length)]; }
+
+        function updateDisplayCount() { document.getElementById("count-number").innerText = objects.length; }
 
         function createParticle(isInitial = false) {
             return {
                 x: isInitial ? Math.random() * canvas.width : emitter.x,
                 y: isInitial ? Math.random() * canvas.height : emitter.y,
-                size: Math.random() * 2.5,
-                opacity: Math.random(),
-                fade: Math.random() * 0.02 + 0.005,
-                vx: (Math.random() - 0.5) * 1.5,
-                vy: (Math.random() - 0.5) * 1.5,
-                color: "rgba(255, 255, 255, "
+                size: Math.random() * 2.5, opacity: Math.random(), fade: Math.random() * 0.02 + 0.005,
+                vx: (Math.random() - 0.5) * 1.5, vy: (Math.random() - 0.5) * 1.5, color: "rgba(255, 255, 255, "
             };
         }
 
         function spawnSmallStar() {
-            smallStars.push({
-                x: Math.random() * canvas.width,
-                y: Math.random() * canvas.height * 0.6,
-                vx: 4 + Math.random() * 6,
-                vy: 1 + Math.random() * 3,
-                life: 0,
-                maxLife: 20 + Math.random() * 30
-            });
+            smallStars.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height * 0.6, vx: 4 + Math.random() * 6, vy: 1 + Math.random() * 3, life: 0, maxLife: 20 + Math.random() * 30 });
         }
 
         function spawnBigStar() {
-            bigStar = {
-                x: -150,
-                y: Math.random() * canvas.height,
-                vx: 10 + Math.random() * 5,
-                vy: (Math.random() - 0.5) * 10,
-                curve: (Math.random() - 0.5) * 0.15
-            };
+            bigStar = { x: -150, y: Math.random() * canvas.height, vx: 10 + Math.random() * 5, vy: (Math.random() - 0.5) * 10, curve: (Math.random() - 0.5) * 0.15 };
         }
 
         function createObject(x, y) {
             const img = document.createElement("img");
             img.src = randomGif();
             let size = randomSize();
-            img.style.width = size + "px";
-            img.style.height = size + "px";
+            img.style.width = size + "px"; img.style.height = size + "px";
             document.body.appendChild(img);
 
             objects.push({
-                el: img,
-                size: size,
-                x: x ?? Math.random() * (window.innerWidth - size),
-                y: y ?? Math.random() * (window.innerHeight - size),
-                vx: (Math.random() - 0.5) * 2,
-                vy: (Math.random() - 0.5) * 2,
-                baseVx: (Math.random() - 0.5) * 2,
-                baseVy: (Math.random() - 0.5) * 2,
-                angle: Math.random() * 360,
-                va: (Math.random() - 0.5) * 12,
-                knockTime: 0,
-                scale: 0,
-                scaleV: 0.2
+                el: img, size: size, x: x ?? Math.random() * (window.innerWidth - size), y: y ?? Math.random() * (window.innerHeight - size),
+                vx: (Math.random() - 0.5) * 2, vy: (Math.random() - 0.5) * 2, baseVx: (Math.random() - 0.5) * 2, baseVy: (Math.random() - 0.5) * 2,
+                angle: Math.random() * 360, va: (Math.random() - 0.5) * 12, knockTime: 0, scale: 0, scaleV: 0.2
             });
+
+            if (objects.length > CONFIG.MAX_OBJECTS) {
+                objects[0].el.remove(); objects.shift();        
+            }
+            updateDisplayCount();
         }
 
         function applyRandomSize(o) {
             let newSize = randomSize();
-            o.size = newSize;
-            o.el.style.width = newSize + "px";
-            o.el.style.height = newSize + "px";
+            o.size = newSize; o.el.style.width = newSize + "px"; o.el.style.height = newSize + "px";
         }
 
         // ==========================================
-        // 3. HỆ THỐNG ĐIỀU KHIỂN & VẬT LÝ
+        // 5. HỆ THỐNG VẬT LÝ & VẼ
         // ==========================================
         function resize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            particles.length = 0;
-            for (let i = 0; i < STAR_COUNT; i++) {
-                particles.push(createParticle(true));
-            }
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            particles.length = 0; for (let i = 0; i < CONFIG.STAR_COUNT; i++) particles.push(createParticle(true));
         }
 
         function resolveCrowding() {
-            const radius = 100;
-            const threshold = 6;
+            const radius = 100; const threshold = 6;
             for (let i = 0; i < objects.length; i++) {
-
                 if (objects[i].knockTime > 15) continue;
-
                 let count = 0;
                 for (let j = 0; j < objects.length; j++) {
-                    let dx = objects[i].x - objects[j].x;
-                    let dy = objects[i].y - objects[j].y;
+                    let dx = objects[i].x - objects[j].x; let dy = objects[i].y - objects[j].y;
                     if (dx * dx + dy * dy < radius * radius) count++;
                 }
                 if (count > threshold) {
                     let angle = Math.random() * Math.PI * 2;
-                    objects[i].vx += Math.cos(angle) * 5;
-                    objects[i].vy += Math.sin(angle) * 5;
-                    objects[i].knockTime = 10;
-                    applyRandomSize(objects[i]);
+                    objects[i].vx += Math.cos(angle) * 5; objects[i].vy += Math.sin(angle) * 5; objects[i].knockTime = 10; applyRandomSize(objects[i]);
                 }
             }
         }
 
         function regionControl() {
-            let grid = 4;
-            let cellW = canvas.width / grid;
-            let cellH = canvas.height / grid;
+            let grid = 4; let cellW = canvas.width / grid; let cellH = canvas.height / grid;
             let cells = Array.from({ length: grid * grid }, () => []);
+            let cellThreshold = Math.ceil(CONFIG.MAX_OBJECTS / 10); 
 
             objects.forEach((o, i) => {
                 let cx = Math.max(0, Math.min(grid - 1, Math.floor(o.x / cellW)));
@@ -213,108 +256,51 @@
 
             cells.forEach(cell => {
                 if (cell.length < 2) createObject();
-                if (cell.length > 12) {
+                if (cell.length > cellThreshold) {
                     for (let i = 0; i < 2; i++) {
                         let idx = cell[Math.floor(Math.random() * cell.length)];
-                        if (objects[idx]) {
-                            objects[idx].el.remove();
-                            objects.splice(idx, 1);
-                        }
+                        if (objects[idx]) { objects[idx].el.remove(); objects.splice(idx, 1); updateDisplayCount(); }
                     }
                 }
             });
         }
 
-        // ==========================================
-        // 4. VÒNG LẶP VẼ (DRAW LOOP)
-        // ==========================================
         function drawBackground() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Cập nhật Emitter
-            emitter.x += emitter.vx;
-            emitter.y += emitter.vy;
+            emitter.x += emitter.vx; emitter.y += emitter.vy;
             if (emitter.x < 0 || emitter.x > canvas.width) emitter.vx *= -1;
             if (emitter.y < 0 || emitter.y > canvas.height) emitter.vy *= -1;
 
-            // Vẽ Sao nền trắng
             particles.forEach(p => {
-                p.x += p.vx; p.y += p.vy;
-                p.opacity += p.fade;
+                p.x += p.vx; p.y += p.vy; p.opacity += p.fade;
                 if (p.opacity > 1 || p.opacity < 0) p.fade *= -1;
-                if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) {
-                    Object.assign(p, createParticle(false));
-                }
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0, p.opacity)})`;
-                ctx.fill();
+                if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) Object.assign(p, createParticle(false));
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0, p.opacity)})`; ctx.fill();
             });
 
-            // Vẽ Sao đuôi cầu vồng
             for (let i = trailParticles.length - 1; i >= 0; i--) {
-                let t = trailParticles[i];
-                t.x += t.vx; t.y += t.vy;
-                t.opacity -= 0.02;
+                let t = trailParticles[i]; t.x += t.vx; t.y += t.vy; t.opacity -= 0.02;
                 if (t.opacity <= 0) { trailParticles.splice(i, 1); continue; }
-                ctx.beginPath();
-                ctx.arc(t.x, t.y, t.size, 0, Math.PI * 2);
-                ctx.fillStyle = t.color + `${t.opacity})`;
-                ctx.fill();
+                ctx.beginPath(); ctx.arc(t.x, t.y, t.size, 0, Math.PI * 2); ctx.fillStyle = t.color + `${t.opacity})`; ctx.fill();
             }
 
-            // Vẽ Sao xẹt (Small Stars)
             for (let i = smallStars.length - 1; i >= 0; i--) {
-                let s = smallStars[i];
-                s.x += s.vx; s.y += s.vy; s.life++;
-                let alpha = 1 - (s.life / s.maxLife);
-                ctx.beginPath();
-                ctx.moveTo(s.x, s.y);
-                ctx.lineTo(s.x - s.vx * 2, s.y - s.vy * 2);
-                ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-                ctx.stroke();
+                let s = smallStars[i]; s.x += s.vx; s.y += s.vy; s.life++; let alpha = 1 - (s.life / s.maxLife);
+                ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x - s.vx * 2, s.y - s.vy * 2); ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`; ctx.stroke();
                 if (s.life > s.maxLife) smallStars.splice(i, 1);
             }
 
-            // Vẽ Sao băng lớn (Quỹ đạo cong)
             if (bigStar) {
-                bigStar.vy += bigStar.curve;
-                bigStar.x += bigStar.vx;
-                bigStar.y += bigStar.vy;
-                let angle = Math.atan2(bigStar.vy, bigStar.vx);
-
+                bigStar.vy += bigStar.curve; bigStar.x += bigStar.vx; bigStar.y += bigStar.vy; let angle = Math.atan2(bigStar.vy, bigStar.vx);
                 for (let i = 0; i < 5; i++) {
                     let hue = (Date.now() / 5 + i * 10) % 360;
-                    trailParticles.push({
-                        x: bigStar.x, y: bigStar.y,
-                        size: Math.random() * 3 + 1,
-                        vx: -Math.cos(angle) * 3 + (Math.random() - 0.5) * 2,
-                        vy: -Math.sin(angle) * 3 + (Math.random() - 0.5) * 2,
-                        opacity: 1, color: `hsla(${hue}, 90%, 70%, `
-                    });
+                    trailParticles.push({ x: bigStar.x, y: bigStar.y, size: Math.random() * 3 + 1, vx: -Math.cos(angle) * 3 + (Math.random() - 0.5) * 2, vy: -Math.sin(angle) * 3 + (Math.random() - 0.5) * 2, opacity: 1, color: `hsla(${hue}, 90%, 70%, ` });
                 }
-
-                ctx.save();
-                ctx.translate(bigStar.x, bigStar.y);
-                ctx.rotate(angle);
-                ctx.beginPath();
-                ctx.moveTo(0, 0); ctx.lineTo(-40, 0);
-                ctx.lineWidth = 6;
-                ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
-                ctx.shadowBlur = 20; ctx.shadowColor = "cyan";
-                ctx.stroke();
-                ctx.restore();
-
+                ctx.save(); ctx.translate(bigStar.x, bigStar.y); ctx.rotate(angle); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-40, 0); ctx.lineWidth = 6; ctx.strokeStyle = "rgba(255, 255, 255, 0.8)"; ctx.shadowBlur = 20; ctx.shadowColor = "cyan"; ctx.stroke(); ctx.restore();
                 objects.forEach(o => {
-                    let dx = o.x + o.size / 2 - bigStar.x;
-                    let dy = o.y + o.size / 2 - bigStar.y;
-                    if (Math.sqrt(dx * dx + dy * dy) < 180) {
-                        o.vx = (dx / Math.sqrt(dx * dx + dy * dy)) * 12;
-                        o.vy = (dy / Math.sqrt(dx * dx + dy * dy)) * 12;
-                        o.knockTime = 25;
-                    }
+                    let dx = o.x + o.size / 2 - bigStar.x; let dy = o.y + o.size / 2 - bigStar.y;
+                    if (Math.sqrt(dx * dx + dy * dy) < 180) { o.vx = (dx / Math.sqrt(dx * dx + dy * dy)) * 12; o.vy = (dy / Math.sqrt(dx * dx + dy * dy)) * 12; o.knockTime = 25; }
                 });
-
                 if (bigStar.x > canvas.width + 500 || bigStar.y < -500 || bigStar.y > canvas.height + 500) bigStar = null;
             }
         }
@@ -331,42 +317,47 @@
                 let dist = Math.sqrt(dx * dx + dy * dy);
 
                 // ==========================================
-                // TƯƠNG TÁC VỚI CHUỘT (CLICK / LỖ ĐEN / ĐẨY LÙI)
+                // LỖ ĐEN & HAI CHẾ ĐỘ DI CHUỘT
                 // ==========================================
                 if (isMouseDown && (Date.now() - mouseDownTime > 300)) {
-                    // Kích hoạt Lỗ Đen khi giữ chuột > 0.15s
+                    // LỖ ĐEN
                     if (dist < 9999) {
                         isPulling = true;
-                        o.vx -= (dx / dist) * 2.5;
-                        o.vy -= (dy / dist) * 2.5;
-                        o.vx *= 0.85; // Ma sát để tụ lại
-                        o.vy *= 0.85;
-                        o.va = (Math.random() - 0.5) * 30; // Xoay tít
+                        if (dist < 1) dist = 1; 
+                        o.vx -= (dx / dist) * 2.5; o.vy -= (dy / dist) * 2.5; o.vx *= 0.85; o.vy *= 0.85; o.va = (Math.random() - 0.5) * 30; 
                     }
                 } else if (!isMouseDown) {
-                    // Không giữ chuột -> Rẽ ra như cũ
-                    if (dist < 120 && dist > 0 && o.knockTime < 40) {
+                    
+                    if (dist < 120 && dist > 0) {
                         let nx = dx / dist;
                         let ny = dy / dist;
-                        o.vx = nx * 10;
-                        o.vy = ny * 10;
-                        o.knockTime = 30;
-                        o.el.src = randomGif();
-                        applyRandomSize(o);
+
+                        if (isCloneMode) {
+                            // --- CHẾ ĐỘ 1: NHÂN ĐÔI ---
+                            if (o.knockTime === 0) {
+                                createObject(o.x, o.y);
+                                objects[objects.length - 1].knockTime = 50; 
+                                o.vx = nx * 15; o.vy = ny * 15; o.knockTime = 50; 
+                                o.el.src = randomGif(); applyRandomSize(o);
+                            } else if (o.knockTime < 30) {
+                                o.vx = nx * 8; o.vy = ny * 8; o.knockTime = 30;
+                            }
+                        } else {
+                            // --- CHẾ ĐỘ 2: ĐẨY MẠNH ---
+                            if (o.knockTime < 40) { 
+                                o.vx = nx * CONFIG.PUSH_FORCE; // Sử dụng Lực đẩy đã cấu hình
+                                o.vy = ny * CONFIG.PUSH_FORCE; 
+                                o.knockTime = 35; // Bay khá lâu trước khi phanh
+                                o.va = (Math.random() - 0.5) * 40; // Đẩy mạnh thì xoay tít mù luôn
+                            }
+                        }
                     }
                 }
 
-                // ==========================================
-                // NỘI SUY LỰC ĐẨY / QUÁN TÍNH
-                // ==========================================
                 if (o.knockTime > 0) {
-                    o.knockTime--;
-                    o.vx *= 0.95;
-                    o.vy *= 0.95;
+                    o.knockTime--; o.vx *= 0.95; o.vy *= 0.95;
                 } else if (!isMouseDown) {
-                    // Trôi nổi bình thường nếu không bị hút
-                    o.vx += (o.baseVx - o.vx) * 0.05;
-                    o.vy += (o.baseVy - o.vy) * 0.05;
+                    o.vx += (o.baseVx - o.vx) * 0.05; o.vy += (o.baseVy - o.vy) * 0.05;
                 }
 
                 o.x += o.vx; o.y += o.vy; o.angle += o.va;
@@ -376,63 +367,37 @@
                 if (o.y < 0) { o.y = 0; o.baseVy *= -1; o.vy *= -0.5; }
                 if (o.y > window.innerHeight - o.size) { o.y = window.innerHeight - o.size; o.baseVy *= -1; o.vy *= -0.5; }
 
-                if (o.scale !== 1) {
-                    o.scaleV += (1 - o.scale) * 0.15;
-                    o.scaleV *= 0.8;
-                    o.scale += o.scaleV;
-                }
+                if (o.scale !== 1) { o.scaleV += (1 - o.scale) * 0.15; o.scaleV *= 0.8; o.scale += o.scaleV; }
 
-                o.el.style.left = o.x + "px";
-                o.el.style.top = o.y + "px";
-                o.el.style.transform = `rotate(${o.angle}deg) scale(${o.scale})`;
+                o.el.style.left = o.x + "px"; o.el.style.top = o.y + "px"; o.el.style.transform = `rotate(${o.angle}deg) scale(${o.scale})`;
             });
             requestAnimationFrame(update);
         }
 
         // ==========================================
-        // 5. KHỞI CHẠY & SỰ KIỆN CHUỘT
+        // 6. SỰ KIỆN CHUỘT
         // ==========================================
         resize();
         window.addEventListener("resize", resize);
 
-        window.addEventListener("mousemove", e => {
-            mouse.x = e.clientX;
-            mouse.y = e.clientY;
-        });
+        window.addEventListener("mousemove", e => { mouse.x = e.clientX; mouse.y = e.clientY; });
 
-        // BẮT ĐẦU NHẤN CHUỘT
         window.addEventListener("mousedown", (e) => {
-            isMouseDown = true;
-            mouseDownTime = Date.now();
+            isMouseDown = true; mouseDownTime = Date.now();
         });
 
-        // NHẢ CHUỘT RA (PHIÊN BẢN NỔ NGẪU NHIÊN & LỰC VĂNG KHÁC NHAU)
         window.addEventListener("mouseup", (e) => {
             isMouseDown = false;
             let holdDuration = Date.now() - mouseDownTime;
 
             if (holdDuration < 400) {
-                // Nhấn thả nhanh -> Sinh mèo
                 createObject(e.clientX - 45, e.clientY - 45);
             } else {
-                // Giữ lâu nhả ra -> Vụ nổ Big Bang
                 if (isPulling) {
                     objects.forEach(o => {
-                        let randomAngle = Math.random() * Math.PI * 2;
-                        let nx = Math.cos(randomAngle);
-                        let ny = Math.sin(randomAngle);
-
-                        // --- CHỈNH SỬA TẠI ĐÂY ---
-                        // Tạo một lực văng ngẫu nhiên từ 60 đến 160 cho mỗi đối tượng
+                        let randomAngle = Math.random() * Math.PI * 2; let nx = Math.cos(randomAngle); let ny = Math.sin(randomAngle);
                         let randomForce = 60 + Math.random() * 100;
-
-                        o.vx = nx * randomForce;
-                        o.vy = ny * randomForce;
-
-                        // Tiện thể, cho thời gian bay (trước khi hãm phanh) cũng ngẫu nhiên luôn!
-                        // Con nào knockTime nhỏ sẽ phanh lại sớm, con nào lớn sẽ bay đập tận tường
-                        o.knockTime = 50 + Math.random() * 50;
-
+                        o.vx = nx * randomForce; o.vy = ny * randomForce; o.knockTime = 50 + Math.random() * 50;
                         applyRandomSize(o);
                     });
                 }
@@ -440,31 +405,19 @@
             isPulling = false;
         });
 
-        for (let i = 0; i < INIT_COUNT; i++) createObject();
-        setInterval(() => {
-            if (Math.random() < 0.8) spawnSmallStar();
-        }, 500);
+        for (let i = 0; i < CONFIG.INIT_COUNT; i++) createObject();
+        setInterval(() => { if (Math.random() < 0.8) spawnSmallStar(); }, 500);
         (function loopBig() { setTimeout(() => { spawnBigStar(); loopBig(); }, 8000 + Math.random() * 4000); })();
 
         update();
 
         // YouTube Music
-        let tag = document.createElement('script');
-        tag.src = "https://www.youtube.com/iframe_api";
-        document.getElementsByTagName('script')[0].parentNode.insertBefore(tag, document.getElementsByTagName('script')[0]);
+        let tag = document.createElement('script'); tag.src = "https://www.youtube.com/iframe_api"; document.getElementsByTagName('script')[0].parentNode.insertBefore(tag, document.getElementsByTagName('script')[0]);
         let ytPlayer;
         function onYouTubeIframeAPIReady() {
             ytPlayer = new YT.Player('yt-player', {
-                videoId: 'oUI_tVU77cw',
-                playerVars: { 'autoplay': 0, 'controls': 0, 'loop': 1, 'playlist': 'oUI_tVU77cw' },
-                events: {
-                    'onReady': (e) => {
-                        e.target.setVolume(50);
-                        document.body.addEventListener('click', () => {
-                            if (ytPlayer.getPlayerState() !== 1) ytPlayer.playVideo();
-                        }, { once: true });
-                    }
-                }
+                videoId: 'oUI_tVU77cw', playerVars: { 'autoplay': 0, 'controls': 0, 'loop': 1, 'playlist': 'oUI_tVU77cw' },
+                events: { 'onReady': (e) => { e.target.setVolume(50); document.body.addEventListener('click', () => { if (ytPlayer.getPlayerState() !== 1) ytPlayer.playVideo(); }, { once: true }); } }
             });
         }
     </script>
