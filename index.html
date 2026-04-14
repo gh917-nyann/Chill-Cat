@@ -17,9 +17,17 @@
         }
 
         @keyframes gradientMove {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
         }
 
         canvas {
@@ -46,7 +54,8 @@
             display: flex;
             flex-direction: column;
             gap: 10px;
-            pointer-events: none; /* Xuyên chuột cho container */
+            pointer-events: none;
+            /* Xuyên chuột cho container */
         }
 
         .panel {
@@ -66,7 +75,8 @@
         }
 
         #mode-btn {
-            pointer-events: auto; /* Cho phép click vào nút này */
+            pointer-events: auto;
+            /* Cho phép click vào nút này */
             cursor: pointer;
             border: 2px solid rgba(0, 255, 204, 0.5);
             color: #00ffcc;
@@ -89,11 +99,11 @@
             background: rgba(255, 87, 34, 0.1);
             box-shadow: 0 0 15px rgba(255, 87, 34, 0.2);
         }
+
         #mode-btn.push-mode:hover {
             background: rgba(255, 87, 34, 0.3);
             box-shadow: 0 0 20px rgba(255, 87, 34, 0.5);
         }
-
     </style>
 </head>
 
@@ -101,7 +111,7 @@
 
     <canvas id="bg"></canvas>
     <div id="yt-player" style="position: absolute; top: -9999px; left: -9999px; width: 1px; height: 1px;"></div>
-    
+
     <div id="ui-container">
         <div id="counter" class="panel">MEOW: <span id="count-number">0</span></div>
         <button id="mode-btn" class="panel">Clone-mode</button>
@@ -112,9 +122,9 @@
         // 1. CÀI ĐẶT THÔNG SỐ CHÍNH
         // ==========================================
         const CONFIG = {
-            MAX_OBJECTS: 180,    
-            INIT_COUNT: 120,     
-            STAR_COUNT: 400,     
+            MAX_OBJECTS: 180,
+            INIT_COUNT: 120,
+            STAR_COUNT: 400,
             TOTAL_GIFS: 30,
             PUSH_FORCE: 35       // LỰC ĐẨY KHI Ở CHẾ ĐỘ "ĐẨY" (Chỉnh cao lên để văng mạnh hơn)
         };
@@ -125,10 +135,10 @@
         const canvas = document.getElementById("bg");
         const ctx = canvas.getContext("2d");
 
-        const particles = [];       
-        const trailParticles = [];  
-        const smallStars = [];      
-        const objects = [];         
+        const particles = [];
+        const trailParticles = [];
+        const smallStars = [];
+        const objects = [];
 
         let bigStar = null;
         let crowdTimer = 0;
@@ -141,7 +151,7 @@
         let mouseDownTime = 0;
 
         // BIẾN TRẠNG THÁI CHẾ ĐỘ (Mặc định là true = Nhân đôi)
-        let isCloneMode = true; 
+        let isCloneMode = true;
 
         let emitter = { x: window.innerWidth / 2, y: window.innerHeight / 2, vx: 1.2, vy: 0.8 };
 
@@ -154,10 +164,10 @@
         const modeBtn = document.getElementById("mode-btn");
         modeBtn.addEventListener("click", (e) => {
             // Ngăn sự kiện click xuyên xuống lớp mousedown bên dưới để không tạo Big Bang
-            e.stopPropagation(); 
-            
+            e.stopPropagation();
+
             isCloneMode = !isCloneMode; // Đảo ngược chế độ
-            
+
             if (isCloneMode) {
                 modeBtn.innerText = "Clone-mode";
                 modeBtn.classList.remove("push-mode");
@@ -209,7 +219,7 @@
             });
 
             if (objects.length > CONFIG.MAX_OBJECTS) {
-                objects[0].el.remove(); objects.shift();        
+                objects[0].el.remove(); objects.shift();
             }
             updateDisplayCount();
         }
@@ -246,7 +256,7 @@
         function regionControl() {
             let grid = 4; let cellW = canvas.width / grid; let cellH = canvas.height / grid;
             let cells = Array.from({ length: grid * grid }, () => []);
-            let cellThreshold = Math.ceil(CONFIG.MAX_OBJECTS / 10); 
+            let cellThreshold = Math.ceil(CONFIG.MAX_OBJECTS / 10);
 
             objects.forEach((o, i) => {
                 let cx = Math.max(0, Math.min(grid - 1, Math.floor(o.x / cellW)));
@@ -323,11 +333,11 @@
                     // LỖ ĐEN
                     if (dist < 9999) {
                         isPulling = true;
-                        if (dist < 1) dist = 1; 
-                        o.vx -= (dx / dist) * 2.5; o.vy -= (dy / dist) * 2.5; o.vx *= 0.85; o.vy *= 0.85; o.va = (Math.random() - 0.5) * 30; 
+                        if (dist < 1) dist = 1;
+                        o.vx -= (dx / dist) * 2.5; o.vy -= (dy / dist) * 2.5; o.vx *= 0.85; o.vy *= 0.85; o.va = (Math.random() - 0.5) * 30;
                     }
                 } else if (!isMouseDown) {
-                    
+
                     if (dist < 120 && dist > 0) {
                         let nx = dx / dist;
                         let ny = dy / dist;
@@ -336,17 +346,17 @@
                             // --- CHẾ ĐỘ 1: NHÂN ĐÔI ---
                             if (o.knockTime === 0) {
                                 createObject(o.x, o.y);
-                                objects[objects.length - 1].knockTime = 50; 
-                                o.vx = nx * 15; o.vy = ny * 15; o.knockTime = 50; 
+                                objects[objects.length - 1].knockTime = 50;
+                                o.vx = nx * 15; o.vy = ny * 15; o.knockTime = 50;
                                 o.el.src = randomGif(); applyRandomSize(o);
                             } else if (o.knockTime < 30) {
                                 o.vx = nx * 8; o.vy = ny * 8; o.knockTime = 30;
                             }
                         } else {
                             // --- CHẾ ĐỘ 2: ĐẨY MẠNH ---
-                            if (o.knockTime < 40) { 
+                            if (o.knockTime < 40) {
                                 o.vx = nx * CONFIG.PUSH_FORCE; // Sử dụng Lực đẩy đã cấu hình
-                                o.vy = ny * CONFIG.PUSH_FORCE; 
+                                o.vy = ny * CONFIG.PUSH_FORCE;
                                 o.knockTime = 35; // Bay khá lâu trước khi phanh
                                 o.va = (Math.random() - 0.5) * 40; // Đẩy mạnh thì xoay tít mù luôn
                             }
@@ -362,11 +372,34 @@
 
                 o.x += o.vx; o.y += o.vy; o.angle += o.va;
 
-                if (o.x < 0) { o.x = 0; o.baseVx *= -1; o.vx *= -0.5; }
-                if (o.x > window.innerWidth - o.size) { o.x = window.innerWidth - o.size; o.baseVx *= -1; o.vx *= -0.5; }
-                if (o.y < 0) { o.y = 0; o.baseVy *= -1; o.vy *= -0.5; }
-                if (o.y > window.innerHeight - o.size) { o.y = window.innerHeight - o.size; o.baseVy *= -1; o.vy *= -0.5; }
+                // ==========================================
+                // XỬ LÝ VA CHẠM TƯỜNG (DYNAMIC BOUNCE)
+                // ==========================================
 
+                // Nếu đang bị tác dụng lực mạnh -> Nảy 95% lực (như bóng cao su siêu nảy)
+                // Nếu trôi lờ đờ bình thường -> Nảy 40% lực (êm ái, bớt ồn ào)
+                let bounciness = (o.knockTime > 0) ? -0.95 : -0.4;
+
+                if (o.x < 0) {
+                    o.x = 0;
+                    o.baseVx *= -1;
+                    o.vx *= bounciness;
+                }
+                if (o.x > window.innerWidth - o.size) {
+                    o.x = window.innerWidth - o.size;
+                    o.baseVx *= -1;
+                    o.vx *= bounciness;
+                }
+                if (o.y < 0) {
+                    o.y = 0;
+                    o.baseVy *= -1;
+                    o.vy *= bounciness;
+                }
+                if (o.y > window.innerHeight - o.size) {
+                    o.y = window.innerHeight - o.size;
+                    o.baseVy *= -1;
+                    o.vy *= bounciness;
+                }
                 if (o.scale !== 1) { o.scaleV += (1 - o.scale) * 0.15; o.scaleV *= 0.8; o.scale += o.scaleV; }
 
                 o.el.style.left = o.x + "px"; o.el.style.top = o.y + "px"; o.el.style.transform = `rotate(${o.angle}deg) scale(${o.scale})`;
